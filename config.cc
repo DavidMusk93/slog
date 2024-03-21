@@ -99,11 +99,11 @@ Seconds Seconds::of(std::string_view s) {
     return {kDefaultValue};
 }
 
-Bytes operator""_bs(const char* p, size_t n) {
+Bytes operator""_b(const char* p, size_t n) {
     return Bytes::of(std::string_view(p, n));
 }
 
-Seconds operator""_ss(const char* p, size_t n) {
+Seconds operator""_s(const char* p, size_t n) {
     return Seconds::of(std::string_view(p, n));
 }
 
