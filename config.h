@@ -3,15 +3,32 @@
 #include <string>
 
 namespace slog {
-class NumBytes {
-    int64_t i_;
-    int64_t n_;
-    NumBytes(int64_t n);
+
+class Bytes {
+    const int64_t v_;
+    Bytes(int64_t v) : v_{v} {}
 
    public:
-    bool Accept(int64_t bytes);
-    friend NumBytes operator""_nb(const char* p, size_t n);
+    auto value() const {
+        return v_;
+    }
+
+    static Bytes of(std::string_view s);
 };
-NumBytes operator""_nb(const char* p, size_t n);
+
+class Seconds {
+    const int64_t v_;
+    Seconds(int64_t v) : v_{v} {}
+
+   public:
+    auto value() const {
+        return v_;
+    }
+
+    static Seconds of(std::string_view s);
+};
+
+Bytes operator""_bs(const char* p, size_t n);
+Seconds operator""_ss(const char* p, size_t n);
 
 }  // namespace slog

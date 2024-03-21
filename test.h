@@ -1,7 +1,15 @@
 #pragma once
 
-#define EXPECT_TRUE(_x) \
-    if (!(_x)) return 1
+#include <iostream>
+#include <string>
+
+using namespace std::literals;
+
+#define EXPECT_TRUE(_x)                                    \
+    if (!(_x)) {                                           \
+        std::cerr << "unexpected: "sv << #_x << std::endl; \
+        return 1;                                          \
+    }
 #define EXPECT_EQ(x, y) EXPECT_TRUE((x) == (y))
 #define EXPECT_NE(x, y) EXPECT_TRUE((x) != (y))
 
