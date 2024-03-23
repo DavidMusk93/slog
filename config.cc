@@ -5,105 +5,92 @@
 
 namespace slog {
 
-constexpr auto kKB = 1024L;
-constexpr auto kMB = 1024 * kKB;
-constexpr auto kGB = 1024 * kMB;
+using table_t = std::array<int64_t, 256>;
 
-constexpr auto kMinute = 60L;
-constexpr auto kHour = 60 * kMinute;
-constexpr auto kDay = 24 * kHour;
+static const auto bytes_unit_table = [] {
+    table_t r{};
+    r['b'] = 1L;
+    r['k'] = 1024L;
+    r['m'] = 1024L * 1024;
+    r['g'] = 1024L * 1024 * 1024;
+    r['B'] = 1L;
+    r['K'] = 1024L;
+    r['M'] = 1024L * 1024;
+    r['G'] = 1024L * 1024 * 1024;
+    return r;
+}();
 
-class Parser {
-    std::array<int64_t, 256> table_;
+static const auto seconds_unit_talbe = [] {
+    table_t r{};
+    r['s'] = 1L;
+    r['m'] = 60L;
+    r['h'] = 60L * 60;
+    r['d'] = 24L * 60 * 60;
+    r['S'] = 1L;
+    r['M'] = 60L;
+    r['H'] = 60L * 60;
+    r['D'] = 24L * 60 * 60;
+    return r;
+}();
 
-   public:
-    Parser(std::vector<std::pair<char, int64_t>> v) : table_{} {
-        for (auto&& p : v) {
-            union {
-                char c;
-                unsigned char u;
-            };
-            c = p.first;
-            table_[u] = p.second;
+static const auto symbol_table = [] {
+    std::array<char, 256> r{};
+    // numbers
+    for (char c = '0'; c <= '9'; ++c) r[c] = 1;
+    // ignore characters
+    r[' '] = 2;
+    r['\''] = 2;
+    return r;
+}();
+
+static std::optional<int64_t> FromString(std::string_view s, const table_t& table) {
+    int64_t r{}, v{};
+    auto p = (const unsigned char*)s.data();
+    const int n = s.size();
+
+    for (int i = 0; i < n; ++i) {
+        auto x = *p++;
+        if (table[x] != 0) {
+            // accept unit
+            r += v * table[x];
+            v = 0;
+            continue;
         }
-    }
-
-    std::optional<int64_t> Parse(std::string_view s) {
-        int64_t r{};
-        int64_t v{};
-        auto p = (unsigned char*)s.data();
-        const int n = s.size();
-
-        for (int i = 0; i < n; ++i) {
-            if (table_[p[i]] != 0) {
-                // accept unit
-                r += v * table_[p[i]];
-                v = 0;
-                continue;
-            }
-
-            if (p[i] < '0' || p[i] > '9') {
-                // unexpected character
+        switch (symbol_table[x]) {
+            case 1:
+                v *= 10;
+                v += x - '0';
+                break;
+            case 2:
+                break;
+            case 0:
+                // invalid character
                 return {};
-            }
-
-            v *= 10;
-            v += p[i] - '0';
+            default:
+                break;
         }
-
-        return r + v;
-    }
-};
-
-Bytes Bytes::of(std::string_view s) {
-    constexpr auto kDefaultValue = 10 * kMB;
-    constexpr auto kUpperValue = 100 * kGB;
-    auto p = Parser({
-        {'b', 1L },
-        {'B', 1L },
-        {'k', kKB},
-        {'K', kKB},
-        {'m', kMB},
-        {'M', kMB},
-        {'g', kGB},
-        {'G', kGB},
-    });
-
-    if (auto r = p.Parse(s); r) {
-        if (*r > kUpperValue) *r = kUpperValue;
-        return {*r};
     }
 
-    return {kDefaultValue};
+    return r + v;
 }
 
-Seconds Seconds::of(std::string_view s) {
-    constexpr auto kDefaultValue = 10 * kMinute;
-    constexpr auto kUpperValue = 100 * kDay;
-    auto p = Parser({
-        {'s', 1L     },
-        {'S', 1L     },
-        {'m', kMinute},
-        {'M', kMinute},
-        {'h', kHour  },
-        {'H', kHour  },
-        {'d', kDay   },
-        {'D', kDay   },
-    });
-
-    if (auto r = p.Parse(s); r) {
-        if (*r > kUpperValue) *r = kUpperValue;
-        return {*r};
-    }
-
-    return {kDefaultValue};
+std::optional<Bytes> Bytes::of(std::string_view s) {
+    auto r = FromString(s, bytes_unit_table);
+    if (!r) return {};
+    return Bytes{*r};
 }
 
-Bytes operator""_b(const char* p, size_t n) {
+std::optional<Seconds> Seconds::of(std::string_view s) {
+    auto r = FromString(s, seconds_unit_talbe);
+    if (!r) return {};
+    return Seconds{*r};
+}
+
+std::optional<Bytes> operator""_b(const char* p, size_t n) {
     return Bytes::of(std::string_view(p, n));
 }
 
-Seconds operator""_s(const char* p, size_t n) {
+std::optional<Seconds> operator""_s(const char* p, size_t n) {
     return Seconds::of(std::string_view(p, n));
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 namespace slog {
@@ -13,7 +14,7 @@ class Bytes {
         return v_;
     }
 
-    static Bytes of(std::string_view s);
+    static std::optional<Bytes> of(std::string_view s);
 };
 
 class Seconds {
@@ -25,10 +26,10 @@ class Seconds {
         return v_;
     }
 
-    static Seconds of(std::string_view s);
+    static std::optional<Seconds> of(std::string_view s);
 };
 
-Bytes operator""_b(const char* p, size_t n);
-Seconds operator""_s(const char* p, size_t n);
+std::optional<Bytes> operator""_b(const char* p, size_t n);
+std::optional<Seconds> operator""_s(const char* p, size_t n);
 
 }  // namespace slog
