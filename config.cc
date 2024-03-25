@@ -74,15 +74,20 @@ Bytes Bytes::of(int64_t v) {
     return v;
 }
 
+#define FROM_CS(_table) \
+    FromString((const unsigned char*)s, _table, _default, [](auto p) { return *p != 0; })
+#define FROM_SV(_table)                                                               \
+    ({                                                                                \
+        auto p = (const unsigned char*)s.data();                                      \
+        FromString(p, _table, _default, [e{p + s.size()}](auto p) { return p < e; }); \
+    })
+
 Bytes Bytes::of(const char* s, int64_t _default) {
-    return FromString((const unsigned char*)s, bytes_unit_table, _default,
-                      [](auto p) { return *p != 0; });
+    return FROM_CS(bytes_unit_table);
 }
 
 Bytes Bytes::of(std::string_view s, int64_t _default) {
-    auto p = (const unsigned char*)s.data();
-    return FromString(p, bytes_unit_table, _default,
-                      [e{p + s.size()}](auto p) { return p < e; });
+    return FROM_SV(bytes_unit_table);
 }
 
 Seconds Seconds::of(int64_t v) {
@@ -90,14 +95,11 @@ Seconds Seconds::of(int64_t v) {
 }
 
 Seconds Seconds::of(const char* s, int64_t _default) {
-    return FromString((const unsigned char*)s, seconds_unit_table, _default,
-                      [](auto p) { return *p != 0; });
+    return FROM_CS(seconds_unit_table);
 }
 
 Seconds Seconds::of(std::string_view s, int64_t _default) {
-    auto p = (const unsigned char*)s.data();
-    return FromString(p, seconds_unit_table, _default,
-                      [e{p + s.size()}](auto p) { return p < e; });
+    return FROM_SV(seconds_unit_table);
 }
 
 Bytes operator""_b(const char* p, size_t n) {
