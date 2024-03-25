@@ -6,7 +6,7 @@ static int64_t bytes_unit_table[256];
 static int64_t seconds_unit_table[256];
 static char symbol_table[256];
 
-__attribute__((__constructor__)) void init() {
+__attribute__((__constructor__)) static void ctor() {
     {
         auto a = bytes_unit_table;
         a[(int)'b'] = 1L;
@@ -39,43 +39,13 @@ __attribute__((__constructor__)) void init() {
     }
 }
 
-static int64_t FromString(const char* s, const int64_t* table, const int64_t _default) {
+template <typename F>
+static int64_t FromString(const unsigned char* p, const int64_t* table,
+                          const int64_t _default, F&& end) {
+    if (!p) return _default;
     int64_t r{}, v{};
-    auto p = (const unsigned char*)s;
 
-    for (auto x = *p; x != 0; x = *++p) {
-        if (table[x] != 0) {
-            // accept unit
-            r += v * table[x];
-            v = 0;
-            continue;
-        }
-        switch (symbol_table[x]) {
-            case 1:
-                v *= 10;
-                v += x - '0';
-                break;
-            case 2:
-                break;
-            case 0:
-                // invalid character
-                return _default;
-            default:
-                break;
-        }
-    }
-
-    return r + v;
-}
-
-static int64_t FromString(std::string_view s, const int64_t* table,
-                          const int64_t _default) {
-    int64_t r{}, v{};
-    auto p = (const unsigned char*)s.data();
-    const int n = s.size();
-
-    for (int i = 0; i < n; ++i) {
-        auto x = *p++;
+    for (auto x = *p; end(p); x = *++p) {
         if (table[x] != 0) {
             // accept unit
             r += v * table[x];
@@ -105,11 +75,14 @@ Bytes Bytes::of(int64_t v) {
 }
 
 Bytes Bytes::of(const char* s, int64_t _default) {
-    return FromString(s, bytes_unit_table, _default);
+    return FromString((const unsigned char*)s, bytes_unit_table, _default,
+                      [](auto p) { return *p != 0; });
 }
 
 Bytes Bytes::of(std::string_view s, int64_t _default) {
-    return FromString(s, bytes_unit_table, _default);
+    auto p = (const unsigned char*)s.data();
+    return FromString(p, bytes_unit_table, _default,
+                      [e{p + s.size()}](auto p) { return p < e; });
 }
 
 Seconds Seconds::of(int64_t v) {
@@ -117,11 +90,14 @@ Seconds Seconds::of(int64_t v) {
 }
 
 Seconds Seconds::of(const char* s, int64_t _default) {
-    return FromString(s, seconds_unit_table, _default);
+    return FromString((const unsigned char*)s, seconds_unit_table, _default,
+                      [](auto p) { return *p != 0; });
 }
 
 Seconds Seconds::of(std::string_view s, int64_t _default) {
-    return FromString(s, seconds_unit_table, _default);
+    auto p = (const unsigned char*)s.data();
+    return FromString(p, seconds_unit_table, _default,
+                      [e{p + s.size()}](auto p) { return p < e; });
 }
 
 Bytes operator""_b(const char* p, size_t n) {
