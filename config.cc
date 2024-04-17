@@ -40,8 +40,8 @@ __attribute__((__constructor__)) static void ctor() {
 }
 
 template <typename F>
-static int64_t FromString(const unsigned char* p, const int64_t* table,
-                          const int64_t _default, F&& end) {
+static int64_t from(const unsigned char* p, const int64_t* table, const int64_t _default,
+                    F&& end) {
     if (!p) return _default;
     int64_t r{}, v{};
 
@@ -74,20 +74,20 @@ Bytes Bytes::of(int64_t v) {
     return v;
 }
 
-#define FROM_CS(_table) \
-    FromString((const unsigned char*)s, _table, _default, [](auto p) { return *p != 0; })
-#define FROM_SV(_table)                                                               \
-    ({                                                                                \
-        auto p = (const unsigned char*)s.data();                                      \
-        FromString(p, _table, _default, [e{p + s.size()}](auto p) { return p < e; }); \
+#define _from_cs(_table) \
+    from((const unsigned char*)s, _table, _default, [](auto p) { return *p != 0; })
+#define _from_sv(_table)                                                        \
+    ({                                                                          \
+        auto p = (const unsigned char*)s.data();                                \
+        from(p, _table, _default, [e{p + s.size()}](auto p) { return p < e; }); \
     })
 
 Bytes Bytes::of(const char* s, int64_t _default) {
-    return FROM_CS(bytes_unit_table);
+    return _from_cs(bytes_unit_table);
 }
 
 Bytes Bytes::of(std::string_view s, int64_t _default) {
-    return FROM_SV(bytes_unit_table);
+    return _from_sv(bytes_unit_table);
 }
 
 Seconds Seconds::of(int64_t v) {
@@ -95,11 +95,11 @@ Seconds Seconds::of(int64_t v) {
 }
 
 Seconds Seconds::of(const char* s, int64_t _default) {
-    return FROM_CS(seconds_unit_table);
+    return _from_cs(seconds_unit_table);
 }
 
 Seconds Seconds::of(std::string_view s, int64_t _default) {
-    return FROM_SV(seconds_unit_table);
+    return _from_sv(seconds_unit_table);
 }
 
 Bytes operator""_b(const char* p, size_t n) {

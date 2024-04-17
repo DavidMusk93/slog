@@ -15,6 +15,11 @@ if(SLOG_USE_ASAN)
 endif()
 
 add_executable(config_test config_test.cpp config.cc)
+add_executable(fmt_test fmt_test.cpp str.cc)
+target_link_libraries(fmt_test pthread)
+add_executable(log_test log_test.cpp log.cc file.cc str.cc config.cc)
+target_link_libraries(log_test pthread)
 
 include(CTest)
 add_test(NAME config_test COMMAND config_test)
+add_test(NAME fmt_test COMMAND fmt_test)
