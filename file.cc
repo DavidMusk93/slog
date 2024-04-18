@@ -65,8 +65,8 @@ bool File::Flush() {
     return fdatasync(fd_) == 0;
 }
 
-std::shared_ptr<File> File::of(const char* path, Buf buf) {
-    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+std::shared_ptr<File> File::of(const char* path, Buf buf, bool append) {
+    int fd = open(path, O_WRONLY | std::array{O_CREAT | O_TRUNC, O_APPEND}[append], 0644);
     if (fd < 0) {
         std::cerr << internal::format("fallback to stdout: open {} failed: {}"sv, path,
                                       strerror(errno))
@@ -125,6 +125,36 @@ RotatePolicy RotatePolicy::Builder::Build() {
     return {std::move(base_), std::move(name_), std::move(ext_), n_, buf_size_};
 }
 
+static bool operator<(struct timespec lhs, struct timespec rhs) {
+    return lhs.tv_sec < rhs.tv_sec ||
+           (lhs.tv_sec == rhs.tv_sec && lhs.tv_nsec < rhs.tv_nsec);
+}
+
+class latest_file {
+    std::string name_;
+    struct timespec ts_ {};
+    size_t size_{};
+
+   public:
+    bool probe(std::string f) {
+        struct stat st {};
+        stat(f.c_str(), &st);
+        if (ts_ < st.st_mtim) {
+            ts_ = st.st_mtim;
+            name_ = std::move(f);
+            size_ = st.st_size;
+            return true;
+        }
+        return false;
+    }
+    auto size() const {
+        return size_;
+    }
+    bool trivial() const {
+        return name_.empty();
+    }
+};
+
 SizeRotate::SizeRotate(RotatePolicy policy, uint64_t size)
     : policy_{std::move(policy)}, size_{size}, written_{0}, i_{0} {
     witness_.reserve(policy_.max_files());
@@ -134,10 +164,9 @@ SizeRotate::SizeRotate(RotatePolicy policy, uint64_t size)
     }
     buf_.resize(policy_.buf_size());
 
-    std::string latest;
-    time_t latest_ts{};
-
+    latest_file latest;
     auto v = policy_.Probe();
+
     for (auto& s : v) {
         char* e{};
         int i = strtol(s.c_str(), &e, 10);
@@ -147,14 +176,9 @@ SizeRotate::SizeRotate(RotatePolicy policy, uint64_t size)
             unlink(f.c_str());
             continue;
         }
-        struct stat st {};
-        stat(f.c_str(), &st);
-        if (latest_ts < st.st_atim.tv_sec) {
-            latest = std::move(s);
-            latest_ts = st.st_atim.tv_sec;
-            i_ = i;
-        }
+        if (latest.probe(policy_.Path(s))) i_ = i;
     }
+    if (!latest.trivial()) latest_ = std::make_shared<latest_file>(std::move(latest));
 }
 
 std::shared_ptr<File> SizeRotate::Next() {
@@ -162,7 +186,16 @@ std::shared_ptr<File> SizeRotate::Next() {
     if (i_ == policy_.max_files()) i_ = 0;
     unlink(policy_.slink().c_str());
     symlink(witness_[i_].c_str(), policy_.slink().c_str());
-    return File::of(witness_[i_++].c_str(), Buf::of(buf_));
+
+    bool append = false;
+    if (latest_) {
+        if (latest_->size() < size_) {
+            append = true;
+            written_ = latest_->size();
+        }
+        latest_.reset();
+    }
+    return File::of(witness_[i_++].c_str(), Buf::of(buf_), append);
 }
 
 bool SizeRotate::Spill(Metadata metadata) {

@@ -41,7 +41,7 @@ class File {
     bool Write(std::string_view s);
     bool Flush();
 
-    static std::shared_ptr<File> of(const char* path, Buf buf);
+    static std::shared_ptr<File> of(const char* path, Buf buf, bool append);
     static std::shared_ptr<File> of(int fd, Buf buf);
 };
 
@@ -105,6 +105,8 @@ class RotatePolicy {
     };
 };
 
+class latest_file;
+
 class SizeRotate {
     const RotatePolicy policy_;
     const uint64_t size_;
@@ -112,6 +114,7 @@ class SizeRotate {
     int i_;
     std::vector<std::string> witness_;
     std::string buf_;
+    std::shared_ptr<latest_file> latest_;
     SizeRotate(RotatePolicy policy, uint64_t size);
     friend class trampoline<SizeRotate>;
 
