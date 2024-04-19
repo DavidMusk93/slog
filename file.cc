@@ -81,6 +81,11 @@ std::shared_ptr<File> File::of(int fd, Buf buf) {
     return std::make_shared<trampoline<File>>(fd, buf);
 }
 
+auto RotatePolicy::Builder::set_buf_size(Bytes bytes) -> Builder& {
+    buf_size_ = bytes.value();
+    return *this;
+}
+
 RotatePolicy::RotatePolicy(std::string base, std::string name, std::string ext, int n,
                            int buf_size)
     : base_{std::move(base)},
@@ -154,6 +159,11 @@ class latest_file {
         return name_.empty();
     }
 };
+
+auto SizeRotate::Builder::set_size(Bytes bytes) -> Builder& {
+    size_ = bytes.value();
+    return *this;
+}
 
 SizeRotate::SizeRotate(RotatePolicy policy, uint64_t size)
     : policy_{std::move(policy)}, size_{size}, written_{0}, i_{0} {

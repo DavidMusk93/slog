@@ -25,6 +25,9 @@ target_link_libraries(log_test pthread)
 add_executable(stat_test stat_test.cpp str.cc)
 target_link_libraries(stat_test pthread)
 
+add_executable(redirect_test redirect_test.cpp log.cc file.cc str.cc config.cc)
+target_link_libraries(redirect_test pthread)
+
 include(CTest)
 add_test(NAME config_test COMMAND config_test)
 add_test(NAME fmt_test COMMAND fmt_test)

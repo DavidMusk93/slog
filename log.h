@@ -20,6 +20,7 @@ class Logger {
    public:
     void Log(std::string_view s, metadata m);
 
+    static void Redirect(int fd, std::string name);
     static std::shared_ptr<Logger> of(std::shared_ptr<ROTATE_POLICY> p) {
         return std::make_shared<trampoline<Logger>>(std::move(p));
     }

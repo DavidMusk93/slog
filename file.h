@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "config.h"
 
 namespace slog {
 
@@ -101,6 +102,7 @@ class RotatePolicy {
             buf_size_ = buf_size;
             return *this;
         }
+        Builder& set_buf_size(Bytes bytes);
         RotatePolicy Build();
     };
 };
@@ -130,6 +132,7 @@ class SizeRotate {
             size_ = size;
             return *this;
         }
+        Builder& set_size(Bytes bytes);
         std::shared_ptr<SizeRotate> Build();
     };
 };
