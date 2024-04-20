@@ -8,12 +8,13 @@
 #include <atomic>
 #include <mutex>
 #include "file.h"
+#include "iter.h"
 
 namespace slog {
 
 int64_t current_seconds();
 
-class event_handler {
+class event_handler : public slog::internal::dl_node {
    public:
     virtual ~event_handler() = default;
     virtual bool on_event() = 0;
@@ -54,7 +55,7 @@ proxy(int, std::shared_ptr<LOGGER>) -> proxy<LOGGER>;
 class async_logger {
     int poller_;
     int term_;
-    std::vector<event_handler*> handlers_;
+    internal::dl_node handlers_;
     std::mutex mutex_;
     pthread_t worker_;
     std::atomic_int64_t seconds_;
@@ -82,15 +83,8 @@ class async_logger {
                 auto h = (event_handler*)events[i].data.ptr;
                 if (!h->on_event()) {
                     epoll_ctl(poller_, EPOLL_CTL_DEL, h->fd(), nullptr);
-                    delete h;
                     std::scoped_lock lock{mutex_};
-                    for (auto it = handlers_.begin(); it != handlers_.end(); ++it) {
-                        if (*it == h) {
-                            *it = handlers_.back();
-                            handlers_.pop_back();
-                            break;
-                        }
-                    }
+                    delete h;
                 }
             }
         }
@@ -120,9 +114,12 @@ class async_logger {
     ~async_logger() {
         eventfd_write(term_, 1);
         pthread_join(worker_, nullptr);
-        for (auto p : handlers_) {
-            delete p;
-        }
+
+        handlers_.iter([](auto p) {
+            delete static_cast<event_handler*>(p);
+            return 0;
+        });
+
         close(term_);
         close(poller_);
     }
@@ -136,9 +133,10 @@ class async_logger {
 
         struct epoll_event ev {};
         ev.events = EPOLLIN;
+        auto p = new proxy{fds[0], std::move(logger)};
+        ev.data.ptr = p;
         std::scoped_lock lock{mutex_};
-        handlers_.push_back(new proxy{fds[0], std::move(logger)});
-        ev.data.ptr = handlers_.back();
+        handlers_.on(p);
         epoll_ctl(poller_, EPOLL_CTL_ADD, fds[0], &ev);
     }
 
