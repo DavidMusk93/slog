@@ -9,7 +9,7 @@ namespace slog {
 template <typename ROTATE_POLICY>
 class Logger {
     struct metadata {
-        int64_t event_time;  // ms
+        int64_t event_time;  // seconds
     };
     std::shared_ptr<ROTATE_POLICY> p_;
     std::shared_ptr<File> f_;

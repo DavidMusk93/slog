@@ -11,12 +11,7 @@
 
 namespace slog {
 
-class coarse_time {
-   public:
-    static int64_t current_seconds() {
-        return 0;
-    }
-};
+int64_t current_seconds();
 
 class event_handler {
    public:
@@ -44,7 +39,7 @@ class proxy : public event_handler {
             // FIXME: handle interrupt
             return false;
         }
-        sink_->Log({buf, (size_t)n}, {coarse_time::current_seconds()});
+        sink_->Log({buf, (size_t)n}, {current_seconds()});
         return true;
     }
 
@@ -62,12 +57,23 @@ class async_logger {
     std::vector<event_handler*> handlers_;
     std::mutex mutex_;
     pthread_t worker_;
+    std::atomic_int64_t seconds_;
+
+    void tick() {
+        struct timeval tv {};
+        gettimeofday(&tv, nullptr);
+        seconds_.store(tv.tv_sec, std::memory_order_relaxed);
+    }
 
     void run() {
         const int max_events = 8;
         struct epoll_event events[max_events];
         for (;;) {
-            int n = epoll_wait(poller_, events, max_events, -1);
+            int n = epoll_wait(poller_, events, max_events, 1000);
+            if (n == 0) {
+                tick();
+                continue;
+            }
             if (n == -1) {
                 break;
             }
@@ -99,6 +105,8 @@ class async_logger {
         ev.events = EPOLLIN;
         ev.data.ptr = &term_;
         epoll_ctl(poller_, EPOLL_CTL_ADD, term_, &ev);
+
+        tick();
 
         pthread_create(
             &worker_, nullptr,
@@ -134,11 +142,19 @@ class async_logger {
         epoll_ctl(poller_, EPOLL_CTL_ADD, fds[0], &ev);
     }
 
+    auto current_seconds() const {
+        return seconds_.load(std::memory_order_relaxed);
+    }
+
     static auto& instance() {
         static async_logger obj;
         return obj;
     }
 };
+
+int64_t current_seconds() {
+    return async_logger::instance().current_seconds();
+}
 
 template <typename ROTATE_POLICY>
 void Logger<ROTATE_POLICY>::Log(std::string_view s, metadata m) {
