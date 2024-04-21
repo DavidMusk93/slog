@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include "iter.h"
@@ -66,7 +68,7 @@ bool File::Flush() {
 }
 
 std::shared_ptr<File> File::of(const char* path, Buf buf, bool append) {
-    int fd = open(path, O_WRONLY | std::array{O_CREAT | O_TRUNC, O_APPEND}[append], 0644);
+    int fd = open(path, O_WRONLY | O_CREAT | std::array{O_TRUNC, O_APPEND}[append], 0644);
     if (fd < 0) {
         std::cerr << internal::format("fallback to stdout: open {} failed: {}"sv, path,
                                       strerror(errno))
@@ -122,7 +124,9 @@ std::vector<std::string> RotatePolicy::Probe() const {
 
 std::string RotatePolicy::Path(std::string_view tag) const {
     std::ostringstream ss;
-    ss << base_ << '/' << name_ << tag << ext_;
+    ss << base_ << '/' << name_;
+    if (!tag.empty()) ss << '.' << tag;
+    ss << '.' << ext_;
     return ss.str();
 }
 
@@ -209,9 +213,7 @@ std::shared_ptr<File> SizeRotate::Next() {
 }
 
 bool SizeRotate::Spill(Metadata metadata) {
-    if (written_ + metadata.size >= size_) {
-        return true;
-    }
+    if (written_ + metadata.size >= size_) return true;
     written_ += metadata.size;
     return false;
 }
@@ -219,6 +221,114 @@ bool SizeRotate::Spill(Metadata metadata) {
 std::shared_ptr<SizeRotate> SizeRotate::Builder::Build() {
     return std::make_shared<trampoline<SizeRotate>>(
         static_cast<RotatePolicy::Builder*>(this)->Build(), size_);
+}
+
+auto TimeRotate::Builder::set_span(Seconds seconds) -> Builder& {
+    static const std::array a{"1h"_s, "2h"_s, "3h"_s, "4h"_s, "6h"_s, "8h"_s, "12h"_s,
+                              "1d"_s, "2d"_s, "3d"_s, "4d"_s, "6d"_s, "7d"_s};
+    span_ = seconds.value();
+    // align span
+    if (auto it = std::lower_bound(
+            a.begin(), a.end(), span_,
+            [](auto element, auto value) { return element.value() < value; });
+        it != a.end()) {
+        span_ = it->value();
+    } else {
+        span_ = a.back().value();
+    }
+    return *this;
+}
+
+std::shared_ptr<TimeRotate> TimeRotate::Builder::Build() {
+    return std::make_shared<trampoline<TimeRotate>>(
+        static_cast<RotatePolicy::Builder*>(this)->Build(), span_);
+}
+
+TimeRotate::TimeRotate(RotatePolicy policy, int64_t span)
+    : policy_{std::move(policy)}, span_{span} {
+    timeval tv{};
+    tm tm{};
+    const auto day_seconds = "1d"_s.value();
+    gettimeofday(&tv, nullptr);
+    localtime_r(&tv.tv_sec, &tm);
+    if (span_ >= day_seconds) {
+        current_time_ = tv.tv_sec - tv.tv_sec % day_seconds;
+    } else {
+        current_time_ = tv.tv_sec - tv.tv_sec % span_;
+    }
+    auto earliest_time = current_time_ - policy_.max_files() * span_;
+
+    buf_.resize(policy_.buf_size());
+    auto v = policy_.Probe();
+
+    std::vector<std::pair<int, int>> rest;
+    int i{};
+    rest.reserve(policy_.max_files());
+
+    for (auto& s : v) {
+        ++i;
+        int n = sscanf(s.c_str(), "%*[^.].%d-%d-%d_%d.%*s", &tm.tm_year, &tm.tm_mon,
+                       &tm.tm_mday, &tm.tm_hour);
+        if (n != 4) {
+            // remove unrelated files
+            unlink(s.c_str());
+            continue;
+        }
+        tm.tm_year -= 1900;
+        tm.tm_mon -= 1;
+        auto t = mktime(&tm);
+        if (t <= earliest_time) {
+            // remove early files
+            unlink(s.c_str());
+            continue;
+        }
+        rest.push_back({i - 1, (int)t});
+    }
+
+    std::sort(rest.begin(), rest.end(),
+              [](auto lhs, auto rhs) { return lhs.second < rhs.second; });
+    if (auto it = std::lower_bound(
+            rest.begin(), rest.end(), current_time_,
+            [](auto element, auto value) { return element.second < value; });
+        it != rest.end()) {
+        rest.resize(it - rest.begin());
+    }
+
+    i = 0;
+    for (auto it = rest.rbegin(); it != rest.rend(); ++it) {
+        if (++i == policy_.max_files()) break;
+        witness_.push_front(policy_.Path(v[it->first]));
+    }
+}
+
+std::string TimeRotate::new_file() const {
+    char buf[16];
+    tm tm{};
+    localtime_r(&current_time_, &tm);
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02d_%02d", tm.tm_year + 1900, tm.tm_mon + 1,
+             tm.tm_mday, tm.tm_hour);
+    return policy_.Path(std::string{buf});
+}
+
+std::shared_ptr<File> TimeRotate::Next() {
+    if ((int)witness_.size() >= policy_.max_files()) {
+        auto t = std::move(witness_.front());
+        witness_.pop_front();
+        unlink(t.c_str());
+    }
+
+    witness_.push_back(new_file());
+
+    unlink(policy_.slink().c_str());
+    symlink(witness_.back().c_str(), policy_.slink().c_str());
+
+    return File::of(witness_.back().c_str(), Buf::of(buf_), true);
+}
+
+bool TimeRotate::Spill(Metadata metadata) {
+    if (metadata.seconds <= current_time_ + span_) return false;
+    current_time_ += span_;
+    return true;
 }
 
 }  // namespace slog

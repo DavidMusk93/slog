@@ -28,5 +28,6 @@ class Logger {
 
 extern int pid;
 extern thread_local int tid;
+extern int64_t current_seconds();
 
 }  // namespace slog

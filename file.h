@@ -1,5 +1,6 @@
 #pragma once
 
+#include <list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -48,7 +49,7 @@ class File {
 
 struct Metadata {
     uint64_t size;
-    int64_t ms;
+    int64_t seconds;
 };
 
 class RotatePolicy {
@@ -75,9 +76,9 @@ class RotatePolicy {
     }
 
     class Builder {
-        std::string base_;
+        std::string base_{"."s};
         std::string name_;
-        std::string ext_{".log"s};
+        std::string ext_{"log"s};
         int n_{6};
         int buf_size_{1024 * 1024};
 
@@ -140,9 +141,13 @@ class SizeRotate {
 class TimeRotate {
     const RotatePolicy policy_;
     const int64_t span_;
-    std::vector<std::string> witness_;
+    int64_t current_time_;
+    std::list<std::string> witness_;
+    std::string buf_;
     TimeRotate(RotatePolicy policy, int64_t span);
     friend class trampoline<TimeRotate>;
+
+    std::string new_file() const;
 
    public:
     std::shared_ptr<File> Next();
@@ -156,6 +161,7 @@ class TimeRotate {
             span_ = span;
             return *this;
         }
+        Builder& set_span(Seconds seconds);
         std::shared_ptr<TimeRotate> Build();
     };
 };

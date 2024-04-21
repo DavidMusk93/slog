@@ -87,6 +87,7 @@ class async_logger {
                     delete h;
                 }
             }
+            tick();
         }
     }
 
@@ -165,8 +166,19 @@ void Logger<ROTATE_POLICY>::Log(std::string_view s, metadata m) {
 template <>
 void Logger<SizeRotate>::Redirect(int fd, std::string name) {
     SizeRotate::Builder builder;
-    builder.set_size("100m"_b);
-    builder.set_name(std::move(name))
+    builder.set_size("100m"_b)
+        .set_name(std::move(name))
+        .set_base("."s)
+        .set_buf_size("1k"_b)
+        .set_num_files(6);
+    async_logger::instance().redirect(fd, of(builder.Build()));
+}
+
+template <>
+void Logger<TimeRotate>::Redirect(int fd, std::string name) {
+    TimeRotate::Builder builder;
+    builder.set_span("1h"_s)
+        .set_name(std::move(name))
         .set_base("."s)
         .set_buf_size("1k"_b)
         .set_num_files(6);
@@ -174,5 +186,6 @@ void Logger<SizeRotate>::Redirect(int fd, std::string name) {
 }
 
 template class Logger<SizeRotate>;
+template class Logger<TimeRotate>;
 
 }  // namespace slog
