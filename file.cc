@@ -110,11 +110,12 @@ std::vector<std::string> RotatePolicy::Probe() const {
             std::string_view s{e->d_name};
             if (!internal::starts_with(s, name_)) return 0;
             if (!internal::ends_with(s, ext_)) return 0;
-            r.push_back(std::string{
-                s.substr(name_.size(), s.size() - name_.size() - ext_.size())});
+            s.remove_prefix(name_.size() + 1);
+            s.remove_suffix(ext_.size() + 1);
+            r.push_back(std::string{s});
             return 0;
         },
-        [](auto p) {
+        [](auto& p) {
             std::cerr << internal::format("opendir {} failed: {}"sv, p, strerror(errno))
                       << std::endl;
         });
@@ -251,6 +252,8 @@ TimeRotate::TimeRotate(RotatePolicy policy, int64_t span)
     const auto day_seconds = "1d"_s.value();
     gettimeofday(&tv, nullptr);
     localtime_r(&tv.tv_sec, &tm);
+    tm.tm_min = 0;
+    tm.tm_sec = 0;
     if (span_ >= day_seconds) {
         current_time_ = tv.tv_sec - tv.tv_sec % day_seconds;
     } else {
@@ -267,11 +270,11 @@ TimeRotate::TimeRotate(RotatePolicy policy, int64_t span)
 
     for (auto& s : v) {
         ++i;
-        int n = sscanf(s.c_str(), "%*[^.].%d-%d-%d_%d.%*s", &tm.tm_year, &tm.tm_mon,
-                       &tm.tm_mday, &tm.tm_hour);
+        int n = sscanf(s.c_str(), "%d-%d-%d_%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+                       &tm.tm_hour);
         if (n != 4) {
             // remove unrelated files
-            unlink(s.c_str());
+            unlink(policy_.Path(s).c_str());
             continue;
         }
         tm.tm_year -= 1900;
@@ -279,7 +282,7 @@ TimeRotate::TimeRotate(RotatePolicy policy, int64_t span)
         auto t = mktime(&tm);
         if (t <= earliest_time) {
             // remove early files
-            unlink(s.c_str());
+            unlink(policy_.Path(s).c_str());
             continue;
         }
         rest.push_back({i - 1, (int)t});
