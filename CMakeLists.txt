@@ -34,6 +34,9 @@ target_link_libraries(redirect2_test pthread)
 
 add_executable(dl_test dl_test.cpp)
 
+add_executable(rotate_stdout redirect3_test.cpp log.cc file.cc str.cc config.cc)
+target_link_libraries(rotate_stdout pthread)
+
 include(CTest)
 add_test(NAME config_test COMMAND config_test)
 add_test(NAME fmt_test COMMAND fmt_test)

@@ -175,6 +175,11 @@ void Logger<SizeRotate>::Redirect(int fd, std::string name) {
 }
 
 template <>
+void Logger<SizeRotate>::Redirect(int fd, std::shared_ptr<SizeRotate> p) {
+    async_logger::instance().redirect(fd, of(std::move(p)));
+}
+
+template <>
 void Logger<TimeRotate>::Redirect(int fd, std::string name) {
     TimeRotate::Builder builder;
     builder.set_span("1h"_s)
@@ -183,6 +188,11 @@ void Logger<TimeRotate>::Redirect(int fd, std::string name) {
         .set_buf_size("1k"_b)
         .set_num_files(6);
     async_logger::instance().redirect(fd, of(builder.Build()));
+}
+
+template <>
+void Logger<TimeRotate>::Redirect(int fd, std::shared_ptr<TimeRotate> p) {
+    async_logger::instance().redirect(fd, of(std::move(p)));
 }
 
 template class Logger<SizeRotate>;
