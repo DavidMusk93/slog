@@ -200,7 +200,8 @@ std::shared_ptr<File> SizeRotate::Next() {
     written_ = 0;
     if (i_ == policy_.max_files()) i_ = 0;
     unlink(policy_.slink().c_str());
-    symlink(witness_[i_].c_str(), policy_.slink().c_str());
+    auto& f = witness_[i_];
+    symlink(f.substr(f.rfind('/') + 1).c_str(), policy_.slink().c_str());
 
     bool append = false;
     if (latest_) {
