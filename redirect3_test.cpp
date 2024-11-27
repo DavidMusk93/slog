@@ -1,7 +1,7 @@
 #include <fcntl.h>
 #include <sys/poll.h>
 #include <unistd.h>
-#include <iostream>
+// #include <iostream>
 #include "log.h"
 
 int main(int argc, char* argv[]) {
@@ -31,11 +31,15 @@ int main(int argc, char* argv[]) {
     Logger<SizeRotate>::Redirect(STDOUT_FILENO, builder.Build());
 
     char buf[1024];
+
     int flags = fcntl(STDIN_FILENO, F_GETFL);
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+
     struct pollfd pfd {
         .fd = STDIN_FILENO, .events = POLLIN, .revents = 0
     };
+
+    // std::cout.rdbuf()->pubsetbuf(nullptr, 0);
     for (;;) {
         int rc = poll(&pfd, 1, -1);
         if (rc < 0) {
@@ -44,7 +48,10 @@ int main(int argc, char* argv[]) {
         }
         if (pfd.revents & POLLIN) {
             auto n = read(pfd.fd, buf, 1024);
-            if (n > 0) std::cout.write(buf, n);
+            if (n > 0) {
+                // std::cout.write(buf, n);
+                write(STDOUT_FILENO, buf, n);
+            }
         }
     }
 }
