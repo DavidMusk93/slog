@@ -18,17 +18,19 @@ class event_handler : public slog::internal::dl_node {
    public:
     virtual ~event_handler() = default;
     virtual bool on_event() = 0;
+    virtual void on_timeout(int now) = 0;
     virtual int fd() = 0;
 };
 
 template <typename LOGGER>
 class proxy : public event_handler {
     int source_;
+    int last_;
     std::shared_ptr<LOGGER> sink_;
 
    public:
     proxy(int fd, std::shared_ptr<LOGGER> logger)
-        : source_{fd}, sink_{std::move(logger)} {}
+        : source_{fd}, last_{0}, sink_{std::move(logger)} {}
     ~proxy() {
         close(source_);
     }
@@ -40,8 +42,14 @@ class proxy : public event_handler {
             if (errno == EAGAIN /* unlikely */ || errno == EINTR) return true;
             return false;
         }
-        sink_->Log({buf, (size_t)n}, {current_seconds()});
+        sink_->Log({buf, (size_t)n}, {last_ = current_seconds()});
         return true;
+    }
+
+    void on_timeout(int now) override {
+        if (last_ + 10 > now) return;
+        last_ = now;
+        sink_->Flush();
     }
 
     int fd() override {
@@ -73,6 +81,11 @@ class async_logger {
             int n = epoll_wait(poller_, events, max_events, 1000);
             if (n == 0) {
                 tick();
+                int now = seconds_.load(std::memory_order_relaxed);
+                handlers_.iter([=](auto p) {
+                    static_cast<event_handler*>(p)->on_timeout(now);
+                    return 0;
+                });
                 continue;
             }
             if (n == -1) {
@@ -163,6 +176,11 @@ void Logger<ROTATE_POLICY>::Log(std::string_view s, metadata m) {
     if (p_->Spill({s.size(), m.event_time})) {
         f_ = p_->Next();
     }
+}
+
+template <typename ROTATE_POLICY>
+void Logger<ROTATE_POLICY>::Flush() {
+    f_->Flush();
 }
 
 template <>

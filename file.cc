@@ -62,8 +62,11 @@ bool File::Write(std::string_view s) {
 
 bool File::Flush() {
     auto r = buf_.Rewind();
-    _write(r);
 
+    // trivial
+    if (r.empty()) return true;
+
+    _write(r);
     return fdatasync(fd_) == 0;
 }
 

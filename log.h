@@ -19,6 +19,7 @@ class Logger {
 
    public:
     void Log(std::string_view s, metadata m);
+    void Flush();
 
     static void Redirect(int fd, std::string name);
     static void Redirect(int fd, std::shared_ptr<ROTATE_POLICY> p);
