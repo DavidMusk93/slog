@@ -37,7 +37,7 @@ class proxy : public event_handler {
         char buf[1024];
         int n = read(source_, buf, sizeof(buf));
         if (n <= 0) {
-            // FIXME: handle interrupt
+            if (errno == EAGAIN /* unlikely */ || errno == EINTR) return true;
             return false;
         }
         sink_->Log({buf, (size_t)n}, {current_seconds()});
@@ -76,6 +76,8 @@ class async_logger {
                 continue;
             }
             if (n == -1) {
+                if (errno == EINTR) continue;
+                // unrecoverable
                 break;
             }
             for (int i = 0; i < n; ++i) {
