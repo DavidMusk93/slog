@@ -12,6 +12,8 @@ if(SLOG_USE_ASAN)
   set(CMAKE_CXX_FLAGS
       "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=leak -fno-omit-frame-pointer"
   )
+else()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Ofast")
 endif()
 
 add_executable(config_test config_test.cpp config.cc)

@@ -309,8 +309,11 @@ std::string TimeRotate::new_file() const {
     char buf[16];
     tm tm{};
     localtime_r(&current_time_, &tm);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
     snprintf(buf, sizeof(buf), "%04d-%02d-%02d_%02d", tm.tm_year + 1900, tm.tm_mon + 1,
              tm.tm_mday, tm.tm_hour);
+#pragma GCC diagnostic pop
     return policy_.Path(std::string{buf});
 }
 
